@@ -1,4 +1,5 @@
 -module(timeit_server_tests).
+-compile(export_all).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("stdlib/include/ms_transform.hrl").
 
@@ -20,22 +21,58 @@ trace_test_() ->
       end}}.
 
 setup() ->
+    os:cmd("rm -r trace_test"),
     net_kernel:start([?NAME, longnames]),
     erlang:set_cookie(node(), ?COOKIE).
 
 teardown(_) ->
-    timeit_server:stop(),
+    timeit_server:stop_all(),
     net_kernel:stop(),
     ok.
 
 trace_tests() ->
-    [fun should_trace_remote_node/0].
+    Functions = ?MODULE:module_info(functions),
+    Filtered = lists:filter(fun filter/1, Functions),
+    lists:map(fun convert/1, Filtered).
 
-should_trace_remote_node() ->
-    {ok, Pid} = timeit_server:new(),
-    ok = timeit_server:start(Pid, [?NODE], [{string, len, '_'}]),
+filter({Function, 0}) ->
+    lists:prefix("should_", atom_to_list(Function));
+
+filter(_) ->
+    false.
+
+convert({Function, 0}) ->
+    fun() -> apply(?MODULE, Function, []) end.
+
+should_write_trace_file() ->
+    {ok, Pid} = timeit_server:open("trace_test"),
+    ok = timeit_server:start_trace(Pid, [?NODE], [{string, len, '_'}]),
     5 = rpc:call(?NODE, string, len, ["hello"]),
-    timer:sleep(500),
-    MS = ets:fun2ms(fun({P,M,F,A,S,T}) when M == string -> {M,F,A} end),
-    Matches = timeit_server:select(Pid, MS),
-    ?assertEqual([{string, len, 1}], Matches).
+    ok = timeit_server:stop_trace(Pid),
+    ?assertEqual(1, length(filelib:wildcard("trace_test/trace.*"))).
+
+should_fold_over_trace_data() ->
+    {ok, Pid} = timeit_server:open("trace_test"),
+    ok = timeit_server:start_trace(Pid, [?NODE], [{string, len, '_'}]),
+    5 = rpc:call(?NODE, string, len, ["hello"]),
+    ok = timeit_server:stop_trace(Pid),
+    Fun = fun(O, A) -> [O|A] end,
+    Actual = timeit_server:fold(Pid, Fun, []),
+    ?assertEqual(2, length(Actual)).
+
+should_write_a_profile_file() ->
+    {ok, Pid} = timeit_server:open("trace_test"),
+    ok = timeit_server:start_trace(Pid, [?NODE], [{string, len, '_'}]),
+    5 = rpc:call(?NODE, string, len, ["hello"]),
+    ok = timeit_server:stop_trace(Pid),
+    ok = timeit_server:profile(Pid),
+    ?assertEqual(1, length(filelib:wildcard("trace_test/profile.*"))).
+
+should_write_a_profile_file1() ->
+    {ok, Pid} = timeit_server:open("trace_test"),
+    ok = timeit_server:start_trace(Pid, [?NODE], [{lists, '_', '_'}]),
+    1 = rpc:call(?NODE, lists, nth, [1, [1,2,3]]),
+    [1, 2, 3] = rpc:call(?NODE, lists, flatten, [[1, [2,3]]]),
+    ok = timeit_server:stop_trace(Pid),
+    ok = timeit_server:profile(Pid),
+    ?assertEqual(1, length(filelib:wildcard("trace_test/profile.*"))).
