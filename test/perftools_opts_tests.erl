@@ -1,23 +1,23 @@
--module(timeit_tests).
+-module(perftools_opts_tests).
 -include_lib("eunit/include/eunit.hrl").
 
 no_args_test() ->
-    timeit:main("").
+    perftools_opts:parse([]).
 
 name_test() ->
-    timeit:main(["-name", "test@127.0.0.1"]),
+    perftools_opts:parse(["-name", "test@127.0.0.1"]),
     ?assertEqual('test@127.0.0.1', node()).
 
 setcookie_test() ->
-    timeit:main(["-setcookie", "test"]),
+    perftools_opts:parse(["-setcookie", "test"]),
     ?assertEqual('test', erlang:get_cookie()).
 
 name_and_setcookie_test() ->
-    timeit:main(["-name", "test@127.0.0.1", "-setcookie", "test"]),
+    perftools_opts:parse(["-name", "test@127.0.0.1", "-setcookie", "test"]),
     ?assertEqual('test@127.0.0.1', node()),
     ?assertEqual('test', erlang:get_cookie()).
 
 setcookie_and_name_test() ->
-    timeit:main(["-setcookie", "test", "-name", "test@127.0.0.1"]),
+    perftools_opts:parse(["-setcookie", "test", "-name", "test@127.0.0.1"]),
     ?assertEqual('test@127.0.0.1', node()),
     ?assertEqual('test', erlang:get_cookie()).
